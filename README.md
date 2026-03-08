@@ -13,9 +13,11 @@ backend/    — FastAPI server (AST → L-system)
 
 ## Quick Start
 
-### 1. Start the Python backend
+### 1. Start the Python backend (in a virtual environment)
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 cd backend
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
