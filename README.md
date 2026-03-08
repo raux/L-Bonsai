@@ -17,9 +17,15 @@ backend/    — FastAPI server (AST → L-system)
 
 ```bash
 cd backend
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
+
+The backend pins `pydantic-core` to a released wheel so installs should not
+need a Rust toolchain. If you still see wheel build failures, ensure your
+environment allows binary wheels (no `PIP_NO_BINARY=:all:`) and that you're
+running Python 3.11+.
 
 ### 2. Start the Vite frontend
 
