@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>L-Bonsai — Code to Bonsai Visualizer</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <!-- ===================== APP HEADER ===================== -->
+    <header id="app-header">
+      <div class="header-left">
+        <span class="logo">🌳 L-Bonsai</span>
+        <span class="tagline">Code → Bonsai Visualizer</span>
+      </div>
+      <div class="header-right">
+        <button id="audio-toggle" class="header-btn" title="Toggle ambient audio">
+          <span id="audio-icon">🔇</span>
+          <span class="btn-label">Lofi Focus</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ===================== PANE LABELS ===================== -->
+    <div id="pane-labels">
+      <div class="pane-label">
+        <span class="pane-num">1</span>
+        <span class="pane-name">Intent</span>
+        <span class="pane-desc">AGENT.md Requirements</span>
+      </div>
+      <div class="pane-label">
+        <span class="pane-num">2</span>
+        <span class="pane-name">Execution</span>
+        <span class="pane-desc">Generated Python Code</span>
+        <div class="status-light-wrapper" title="LM Studio connection status">
+          <span id="status-light" class="status-light red"></span>
+          <span id="status-text" class="status-text">LM Studio</span>
+        </div>
+      </div>
+      <div class="pane-label">
+        <span class="pane-num">3</span>
+        <span class="pane-name">Visualization</span>
+        <span class="pane-desc">3D Bonsai Tree</span>
+      </div>
+    </div>
+
+    <!-- ===================== MAIN THREE-PANE GRID ===================== -->
+    <main id="main-grid">
+
+      <!-- PANE 1: Agentic Input -->
+      <section class="pane" id="pane-intent">
+        <div class="pane-content">
+          <textarea
+            id="agent-input"
+            spellcheck="false"
+            placeholder="# AGENT.md&#10;&#10;Paste or type your requirements here.&#10;&#10;Example:&#10;Write a Python script that implements a&#10;binary search tree with insert, search,&#10;and delete operations."
+          ></textarea>
+        </div>
+        <div class="pane-actions">
+          <button id="btn-generate" class="btn-primary">
+            <span class="btn-icon">✨</span> Send to Local LLM
+          </button>
+        </div>
+      </section>
+
+      <!-- PANE 2: Generation Engine -->
+      <section class="pane" id="pane-execution">
+        <div class="pane-content">
+          <textarea
+            id="code-output"
+            spellcheck="false"
+            placeholder="# Generated Python code will appear here...&#10;&#10;# Click 'Send to Local LLM' to generate code from your requirements."
+          ></textarea>
+        </div>
+        <div class="pane-actions">
+          <button id="btn-grow" class="btn-primary btn-grow">
+            <span class="btn-icon">🌿</span> Grow Bonsai
+          </button>
+        </div>
+      </section>
+
+      <!-- PANE 3: Botanical Visualization -->
+      <section class="pane" id="pane-visualization">
+        <canvas id="bonsai-canvas"></canvas>
+        <div id="viz-overlay">
+          <p id="viz-hint">Click <strong>Grow Bonsai</strong> to render your code as a 3D tree.</p>
+        </div>
+        <div id="viz-controls">
+          <span class="hint-text">🖱 Drag to orbit · Scroll to zoom · Right-drag to pan</span>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ===================== AUDIO ELEMENTS ===================== -->
+    <!-- Ambient lofi: generated via Web Audio API in main.js -->
+    <!-- SFX: short tones generated procedurally -->
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
