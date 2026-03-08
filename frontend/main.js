@@ -533,3 +533,6 @@ btnGrow.addEventListener("click", async () => {
     btnGrow.innerHTML = '<span class="btn-icon">🌿</span> Grow Bonsai';
   }
 });
+
+// Exported for testing
+export { checkLmStudioHealth, Turtle3D };
