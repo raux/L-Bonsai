@@ -24,10 +24,13 @@ python -m pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-The backend pins `pydantic-core` to a released wheel so installs should not
-need a Rust toolchain. If you still see wheel build failures, ensure your
-environment allows binary wheels (no `PIP_NO_BINARY=:all:`) and that you're
-running Python 3.11+.
+**Troubleshooting:**
+- The backend uses recent versions of `pydantic` and `pydantic-core` with pre-built wheels for most platforms
+- **If you see "failed to run custom build command for `pyo3-ffi`" errors:**
+  1. Ensure you're using **Python 3.11+** (check with `python --version`)
+  2. Upgrade pip first: `python -m pip install --upgrade pip` (should be pip 24.0+)
+  3. Ensure binary wheels are allowed (no `PIP_NO_BINARY=:all:` environment variable)
+  4. On macOS with Apple Silicon, ensure you're using native ARM Python, not x86_64 via Rosetta
 
 ### 2. Start the Vite frontend
 
