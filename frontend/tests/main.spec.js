@@ -238,3 +238,45 @@ describe("Turtle3D", () => {
     expect(turtle._group.children).toHaveLength(1);
   });
 });
+
+describe("stripMarkdownFences", () => {
+  test("strips ```python fences from code", async () => {
+    const { stripMarkdownFences } = await import("../main.js");
+    const input = "```python\ndef hello():\n    print('world')\n```";
+    const expected = "def hello():\n    print('world')";
+    expect(stripMarkdownFences(input)).toBe(expected);
+  });
+
+  test("strips plain ``` fences from code", async () => {
+    const { stripMarkdownFences } = await import("../main.js");
+    const input = "```\ndef hello():\n    print('world')\n```";
+    const expected = "def hello():\n    print('world')";
+    expect(stripMarkdownFences(input)).toBe(expected);
+  });
+
+  test("strips ```py fences from code", async () => {
+    const { stripMarkdownFences } = await import("../main.js");
+    const input = "```py\ndef hello():\n    print('world')\n```";
+    const expected = "def hello():\n    print('world')";
+    expect(stripMarkdownFences(input)).toBe(expected);
+  });
+
+  test("returns code unchanged when no fences present", async () => {
+    const { stripMarkdownFences } = await import("../main.js");
+    const input = "def hello():\n    print('world')";
+    expect(stripMarkdownFences(input)).toBe(input);
+  });
+
+  test("does not strip backticks within code content", async () => {
+    const { stripMarkdownFences } = await import("../main.js");
+    const input = "def hello():\n    s = '```'\n    print(s)";
+    expect(stripMarkdownFences(input)).toBe(input);
+  });
+
+  test("handles complex multi-line code with fences", async () => {
+    const { stripMarkdownFences } = await import("../main.js");
+    const input = "```python\nclass Calculator:\n    def add(self, a, b):\n        return a + b\n\nfor i in range(10):\n    print(i)\n```";
+    const expected = "class Calculator:\n    def add(self, a, b):\n        return a + b\n\nfor i in range(10):\n    print(i)";
+    expect(stripMarkdownFences(input)).toBe(expected);
+  });
+});
