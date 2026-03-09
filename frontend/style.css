@@ -83,11 +83,6 @@ html, body {
   background: rgba(88, 166, 255, .08);
 }
 
-.header-btn.active {
-  border-color: var(--accent-green);
-  color: var(--accent-green);
-}
-
 /* ---- Model controls ---- */
 .model-controls {
   display: flex;
