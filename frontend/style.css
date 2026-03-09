@@ -155,6 +155,69 @@ html, body {
   color: var(--accent-amber);
 }
 
+/* ---- Connection status badge ---- */
+.connection-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .68rem;
+  padding: .3rem .6rem;
+  border-radius: 999px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.connection-status-badge.connected {
+  background: rgba(86, 211, 100, 0.15);
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.connection-status-badge.disconnected {
+  background: rgba(248, 81, 73, 0.15);
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.connection-status-badge.connecting {
+  background: rgba(227, 179, 65, 0.15);
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+}
+
+/* ---- Connection error message ---- */
+.connection-error-message {
+  font-size: .75rem;
+  padding: .3rem .6rem;
+  border-radius: var(--radius);
+  margin-left: .5rem;
+  display: none;
+}
+
+.connection-error-message.visible {
+  display: inline-block;
+}
+
+.connection-error-message.error {
+  color: var(--accent-red);
+  background: rgba(248, 81, 73, 0.15);
+  border: 1px solid rgba(248, 81, 73, 0.3);
+}
+
+.connection-error-message.success {
+  color: var(--accent-green);
+  background: rgba(86, 211, 100, 0.15);
+  border: 1px solid rgba(86, 211, 100, 0.3);
+}
+
+.connection-error-message.info {
+  color: var(--accent-amber);
+  background: rgba(227, 179, 65, 0.15);
+  border: 1px solid rgba(227, 179, 65, 0.3);
+}
+
+
 /* ---- Pane labels bar ---- */
 #pane-labels {
   display: grid;

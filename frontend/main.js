@@ -36,6 +36,8 @@ const paneExecution= document.getElementById("pane-execution");
 const lmStudioUrlInput = document.getElementById("lm-studio-url");
 const modelSelector = document.getElementById("model-selector");
 const connectBtn = document.getElementById("connect-btn");
+const connectionStatusBadge = document.getElementById("connection-status-badge");
+const connectionErrorMessage = document.getElementById("connection-error-message");
 
 // ---------------------------------------------------------------------------
 // Audio System
@@ -154,6 +156,43 @@ let availableModels = [];
 let selectedModel = "local-model";
 let healthCheckInterval = null;
 
+/**
+ * Update the connection status badge
+ * @param {string} status - 'connected' | 'disconnected' | 'connecting'
+ * @param {string} message - Status message to display
+ */
+function updateConnectionStatusBadge(status, message) {
+  if (!connectionStatusBadge) return;
+
+  connectionStatusBadge.className = `connection-status-badge ${status}`;
+
+  const icons = {
+    connected: '● ',
+    disconnected: '○ ',
+    connecting: '⏳ '
+  };
+
+  connectionStatusBadge.textContent = `${icons[status] || ''}${message}`;
+}
+
+/**
+ * Show or hide connection error message
+ * @param {string} message - Error message to display (empty to hide)
+ * @param {string} type - 'error' | 'success' | 'info'
+ */
+function showConnectionMessage(message, type = 'error') {
+  if (!connectionErrorMessage) return;
+
+  if (!message) {
+    connectionErrorMessage.textContent = '';
+    connectionErrorMessage.className = 'connection-error-message';
+    return;
+  }
+
+  connectionErrorMessage.textContent = message;
+  connectionErrorMessage.className = `connection-error-message visible ${type}`;
+}
+
 // Initialize URL input with saved value or default (only if element exists)
 if (lmStudioUrlInput) {
   const savedUrl = localStorage.getItem("lmStudioUrl") || "http://localhost:1234";
@@ -231,7 +270,10 @@ if (modelSelector) {
 async function checkLmStudioHealth() {
   try {
     const baseUrl = lmStudioUrlInput ? lmStudioUrlInput.value.trim() : "http://localhost:1234";
-    if (!baseUrl) return false;
+    if (!baseUrl) {
+      updateConnectionStatusBadge('disconnected', 'Disconnected');
+      return false;
+    }
 
     // Validate URL format (basic check)
     try {
@@ -240,6 +282,12 @@ async function checkLmStudioHealth() {
       console.warn('Invalid URL format:', baseUrl);
       if (statusLight) statusLight.className = "status-light red";
       if (statusText) statusText.textContent = "Invalid URL";
+      if (connectBtn) {
+        connectBtn.className = "header-btn";
+        connectBtn.innerHTML = '<span class="btn-icon">🔌</span><span class="btn-label">Connect</span>';
+      }
+      updateConnectionStatusBadge('disconnected', 'Invalid URL');
+      showConnectionMessage('Invalid URL format. Please check the LM Studio URL.', 'error');
       return false;
     }
 
@@ -258,12 +306,20 @@ async function checkLmStudioHealth() {
         connectBtn.className = "header-btn connected";
         connectBtn.innerHTML = '<span class="btn-icon">✓</span><span class="btn-label">Connected</span>';
       }
+      updateConnectionStatusBadge('connected', 'Connected');
+      showConnectionMessage(''); // Clear any error messages
       return true;
     } else {
-      console.warn(`Server returned HTTP ${resp.status}`);
+      const errorMsg = `Server returned HTTP ${resp.status}`;
+      console.warn(errorMsg);
+      showConnectionMessage(`${errorMsg}. Please check if LM Studio is running.`, 'error');
     }
   } catch (err) {
-    console.warn('Connection error:', err.message || err);
+    const errorMsg = err.name === 'TimeoutError'
+      ? 'Connection timeout. Is LM Studio running?'
+      : err.message || 'Connection failed';
+    console.warn('Connection error:', errorMsg);
+    showConnectionMessage(errorMsg, 'error');
   }
   if (statusLight) statusLight.className = "status-light red";
   if (statusText) statusText.textContent = "LM Studio ✗";
@@ -272,6 +328,7 @@ async function checkLmStudioHealth() {
     connectBtn.innerHTML = '<span class="btn-icon">🔌</span><span class="btn-label">Connect</span>';
   }
   if (modelSelector) modelSelector.disabled = true;
+  updateConnectionStatusBadge('disconnected', 'Disconnected');
   return false;
 }
 
@@ -283,6 +340,8 @@ if (connectBtn) {
     connectBtn.innerHTML = '<span class="btn-icon">⏳</span><span class="btn-label">Connecting...</span>';
     if (statusLight) statusLight.className = "status-light amber";
     if (statusText) statusText.textContent = "Connecting…";
+    updateConnectionStatusBadge('connecting', 'Connecting...');
+    showConnectionMessage(''); // Clear previous messages
 
     const connected = await checkLmStudioHealth();
     if (connected) {
@@ -301,12 +360,16 @@ if (connectBtn) {
       }
 
       playSfx("chime");
+      showConnectionMessage('Successfully connected to LM Studio!', 'success');
+      // Clear success message after 3 seconds
+      setTimeout(() => showConnectionMessage(''), 3000);
     }
   });
 }
 
 // Initial connection attempt and start polling
 (async () => {
+  updateConnectionStatusBadge('connecting', 'Connecting...');
   const connected = await checkLmStudioHealth();
   if (connected) {
     await updateModelSelector();
@@ -350,6 +413,7 @@ btnGenerate.addEventListener("click", async () => {
   btnGenerate.textContent = "⏳ Generating…";
   paneExecution.classList.add("generating");
   codeOutput.value = "";
+  showConnectionMessage(''); // Clear previous messages
 
   statusLight.className = "status-light amber";
   statusText.textContent = "Connecting…";
@@ -417,7 +481,9 @@ btnGenerate.addEventListener("click", async () => {
   } catch (err) {
     statusLight.className = "status-light red";
     statusText.textContent = "LM Studio ✗";
-    codeOutput.value = `# Error connecting to LM Studio:\n# ${err.message}\n#\n# Make sure LM Studio is running at ${LM_STUDIO_URL}\n# and a model is loaded.`;
+    const errorMsg = `Error connecting to LM Studio: ${err.message}`;
+    codeOutput.value = `# ${errorMsg}\n#\n# Make sure LM Studio is running at ${LM_STUDIO_URL}\n# and a model is loaded.`;
+    showConnectionMessage(errorMsg, 'error');
   } finally {
     btnGenerate.disabled = false;
     btnGenerate.innerHTML = '<span class="btn-icon">✨</span> Send to Local LLM';
