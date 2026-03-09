@@ -48,6 +48,23 @@ For the "Send to Local LLM" feature, download and run
 [LM Studio](https://lmstudio.ai/), load a model, and start the local
 server at `http://localhost:1234`.
 
+#### Using the Model Connection UI
+
+The application includes UI controls in the header to manage your LM Studio connection:
+
+1. **LM Studio URL Input**: Configure the base URL (default: `http://localhost:1234`)
+   - The URL is persisted in localStorage for future sessions
+
+2. **Model Selector**: Choose from available models loaded in LM Studio
+   - Automatically populated when connected
+   - Your selection is saved for the next session
+
+3. **Connect Button**: Manually trigger connection to LM Studio
+   - Shows connection status (🔌 Connect, ⏳ Connecting..., ✓ Connected)
+   - Auto-refreshes available models on successful connection
+
+The app automatically polls LM Studio every 5 seconds to maintain connection status.
+
 ## Usage Flow
 
 | Pane | Name | Action |
