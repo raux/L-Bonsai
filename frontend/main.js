@@ -17,6 +17,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 // ---------------------------------------------------------------------------
 let LM_STUDIO_URL = "http://localhost:1234/v1";
 const BACKEND_URL = "/api"; // proxied by Vite dev server to localhost:8000
+const API_KEY = "lm-studio"; // Default API key for LM Studio connections
 
 // ---------------------------------------------------------------------------
 // DOM references
@@ -173,7 +174,12 @@ async function fetchAvailableModels() {
   try {
     if (!LM_STUDIO_URL) return [];
 
-    const resp = await fetch(`${LM_STUDIO_URL}/models`, { signal: AbortSignal.timeout(2500) });
+    const resp = await fetch(`${LM_STUDIO_URL}/models`, {
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+      },
+      signal: AbortSignal.timeout(2500)
+    });
     if (!resp.ok) return [];
 
     const data = await resp.json();
@@ -239,7 +245,12 @@ async function checkLmStudioHealth() {
 
     LM_STUDIO_URL = `${baseUrl}/v1`;
 
-    const resp = await fetch(`${LM_STUDIO_URL}/models`, { signal: AbortSignal.timeout(2500) });
+    const resp = await fetch(`${LM_STUDIO_URL}/models`, {
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+      },
+      signal: AbortSignal.timeout(2500)
+    });
     if (resp.ok) {
       if (statusLight) statusLight.className = "status-light green";
       if (statusText) statusText.textContent = "LM Studio ✓";
@@ -346,7 +357,10 @@ btnGenerate.addEventListener("click", async () => {
   try {
     const resp = await fetch(`${LM_STUDIO_URL}/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${API_KEY}`,
+      },
       body: JSON.stringify({
         model: selectedModel || "local-model",
         messages: [
