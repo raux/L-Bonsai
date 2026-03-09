@@ -153,18 +153,22 @@ let availableModels = [];
 let selectedModel = "local-model";
 let healthCheckInterval = null;
 
-// Initialize URL input with saved value or default
-lmStudioUrlInput.value = localStorage.getItem("lmStudioUrl") || "http://localhost:1234";
+// Initialize URL input with saved value or default (only if element exists)
+if (lmStudioUrlInput) {
+  lmStudioUrlInput.value = localStorage.getItem("lmStudioUrl") || "http://localhost:1234";
 
-// Update LM_STUDIO_URL when input changes
-lmStudioUrlInput.addEventListener("input", () => {
-  const baseUrl = lmStudioUrlInput.value.trim();
-  localStorage.setItem("lmStudioUrl", baseUrl);
-});
+  // Update LM_STUDIO_URL when input changes
+  lmStudioUrlInput.addEventListener("input", () => {
+    const baseUrl = lmStudioUrlInput.value.trim();
+    localStorage.setItem("lmStudioUrl", baseUrl);
+  });
+}
 
 async function fetchAvailableModels() {
   try {
-    const baseUrl = lmStudioUrlInput.value.trim() || "http://localhost:1234";
+    const baseUrl = lmStudioUrlInput ? lmStudioUrlInput.value.trim() : "http://localhost:1234";
+    if (!baseUrl) return [];
+
     const resp = await fetch(`${baseUrl}/v1/models`, { signal: AbortSignal.timeout(2500) });
     if (!resp.ok) return [];
 
@@ -176,6 +180,8 @@ async function fetchAvailableModels() {
 }
 
 async function updateModelSelector() {
+  if (!modelSelector) return;
+
   const models = await fetchAvailableModels();
   availableModels = models;
 
@@ -205,49 +211,59 @@ async function updateModelSelector() {
   }
 }
 
-modelSelector.addEventListener("change", () => {
-  selectedModel = modelSelector.value || "local-model";
-  localStorage.setItem("selectedModel", selectedModel);
-});
+if (modelSelector) {
+  modelSelector.addEventListener("change", () => {
+    selectedModel = modelSelector.value || "local-model";
+    localStorage.setItem("selectedModel", selectedModel);
+  });
+}
 
 async function checkLmStudioHealth() {
   try {
-    const baseUrl = lmStudioUrlInput.value.trim() || "http://localhost:1234";
+    const baseUrl = lmStudioUrlInput ? lmStudioUrlInput.value.trim() : "http://localhost:1234";
+    if (!baseUrl) return false;
+
     LM_STUDIO_URL = `${baseUrl}/v1`;
 
     const resp = await fetch(`${LM_STUDIO_URL}/models`, { signal: AbortSignal.timeout(2500) });
     if (resp.ok) {
-      statusLight.className = "status-light green";
-      statusText.textContent = "LM Studio ✓";
-      connectBtn.className = "header-btn connected";
-      connectBtn.innerHTML = '<span class="btn-icon">✓</span><span class="btn-label">Connected</span>';
+      if (statusLight) statusLight.className = "status-light green";
+      if (statusText) statusText.textContent = "LM Studio ✓";
+      if (connectBtn) {
+        connectBtn.className = "header-btn connected";
+        connectBtn.innerHTML = '<span class="btn-icon">✓</span><span class="btn-label">Connected</span>';
+      }
       return true;
     }
   } catch {
     /* fall through */
   }
-  statusLight.className = "status-light red";
-  statusText.textContent = "LM Studio ✗";
-  connectBtn.className = "header-btn";
-  connectBtn.innerHTML = '<span class="btn-icon">🔌</span><span class="btn-label">Connect</span>';
-  modelSelector.disabled = true;
+  if (statusLight) statusLight.className = "status-light red";
+  if (statusText) statusText.textContent = "LM Studio ✗";
+  if (connectBtn) {
+    connectBtn.className = "header-btn";
+    connectBtn.innerHTML = '<span class="btn-icon">🔌</span><span class="btn-label">Connect</span>';
+  }
+  if (modelSelector) modelSelector.disabled = true;
   return false;
 }
 
 // Connect button handler
-connectBtn.addEventListener("click", async () => {
-  playSfx("click");
-  connectBtn.className = "header-btn connecting";
-  connectBtn.innerHTML = '<span class="btn-icon">⏳</span><span class="btn-label">Connecting...</span>';
-  statusLight.className = "status-light amber";
-  statusText.textContent = "Connecting…";
+if (connectBtn) {
+  connectBtn.addEventListener("click", async () => {
+    playSfx("click");
+    connectBtn.className = "header-btn connecting";
+    connectBtn.innerHTML = '<span class="btn-icon">⏳</span><span class="btn-label">Connecting...</span>';
+    if (statusLight) statusLight.className = "status-light amber";
+    if (statusText) statusText.textContent = "Connecting…";
 
-  const connected = await checkLmStudioHealth();
-  if (connected) {
-    await updateModelSelector();
-    playSfx("chime");
-  }
-});
+    const connected = await checkLmStudioHealth();
+    if (connected) {
+      await updateModelSelector();
+      playSfx("chime");
+    }
+  });
+}
 
 // Initial connection attempt and start polling
 (async () => {
@@ -256,16 +272,18 @@ connectBtn.addEventListener("click", async () => {
     await updateModelSelector();
   }
 
-  // Poll every 5 seconds
-  healthCheckInterval = setInterval(async () => {
-    const wasConnected = connectBtn.classList.contains("connected");
-    const isConnected = await checkLmStudioHealth();
+  // Poll every 5 seconds (only if elements exist)
+  if (connectBtn) {
+    healthCheckInterval = setInterval(async () => {
+      const wasConnected = connectBtn.classList.contains("connected");
+      const isConnected = await checkLmStudioHealth();
 
-    // If we just connected, refresh models
-    if (isConnected && !wasConnected) {
-      await updateModelSelector();
-    }
-  }, 5000);
+      // If we just connected, refresh models
+      if (isConnected && !wasConnected) {
+        await updateModelSelector();
+      }
+    }, 5000);
+  }
 })();
 
 // ---------------------------------------------------------------------------
