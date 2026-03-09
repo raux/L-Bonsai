@@ -4,12 +4,9 @@
  * Orchestrates:
  *  1. LM Studio streaming integration (Pane 1 → Pane 2)
  *  2. Backend /api/generate-bonsai call (Pane 2 → Pane 3)
- *  3. Three.js 3D bonsai rendering with Turtle3D
+ *  3. 2D canvas bonsai rendering with Turtle2D (animated L-system growth)
  *  4. LM Studio health-check status light
  */
-
-import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -303,13 +300,8 @@ btnGenerate.addEventListener("click", async () => {
   statusText.textContent = "Connecting…";
 
   // Initialize turtle for progressive rendering
-  if (!turtle) turtle = new Turtle3D(scene);
+  if (!turtle) turtle = new Turtle2D(ctx);
   turtle.startProgressive();
-
-  // Camera setup for viewing
-  controls.target.set(0, 4, 0);
-  camera.position.set(0, 6, 14);
-  controls.update();
 
   let accumulatedCode = "";
   let lastBonsaiUpdate = 0;
@@ -464,112 +456,69 @@ async function updateBonsaiFromCode(code) {
 }
 
 // ---------------------------------------------------------------------------
-// Three.js Scene Setup
+// 2D Canvas Setup
 // ---------------------------------------------------------------------------
-const renderer = new THREE.WebGLRenderer({
-  canvas: bonsaiCanvas,
-  antialias: true,
-  alpha: true,
-});
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const ctx = bonsaiCanvas.getContext("2d");
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0d1117);
-scene.fog = new THREE.Fog(0x0d1117, 18, 40);
+// Canvas background color
+const BACKGROUND_COLOR = "#0d1117";
+const BRANCH_COLOR = "#4a3728";
+const LEAF_COLOR = "#2d6a3f";
 
-const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 100);
-camera.position.set(0, 4, 12);
-
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.08;
-controls.minDistance = 2;
-controls.maxDistance = 35;
-controls.target.set(0, 3, 0);
-controls.update();
-
-// Lighting
-const ambLight = new THREE.AmbientLight(0x334455, 1.2);
-scene.add(ambLight);
-
-const dirLight = new THREE.DirectionalLight(0xfff4e0, 1.6);
-dirLight.position.set(6, 10, 8);
-dirLight.castShadow = true;
-dirLight.shadow.mapSize.width = 1024;
-dirLight.shadow.mapSize.height = 1024;
-scene.add(dirLight);
-
-const fillLight = new THREE.DirectionalLight(0x203050, 0.5);
-fillLight.position.set(-5, 2, -5);
-scene.add(fillLight);
-
-// Ground plane
-const groundGeo = new THREE.CircleGeometry(7, 64);
-const groundMat = new THREE.MeshLambertMaterial({ color: 0x1a2330 });
-const ground = new THREE.Mesh(groundGeo, groundMat);
-ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
-scene.add(ground);
+// Turtle instance (initialized later after Turtle2D class is defined)
+let turtle = null;
 
 // Resize handler
-function resizeRenderer() {
+function resizeCanvas() {
   const canvas = bonsaiCanvas;
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
-  if (renderer.domElement.width !== w || renderer.domElement.height !== h) {
-    renderer.setSize(w, h, false);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+    // Redraw if we have a turtle
+    if (turtle && turtle._lastLsystem) {
+      turtle.drawImmediate(turtle._lastLsystem);
+    }
   }
 }
 
-// Animation loop
-function animate() {
-  requestAnimationFrame(animate);
-  resizeRenderer();
-  controls.update();
-  renderer.render(scene, camera);
-}
-animate();
+// Initial resize
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
 
 // ---------------------------------------------------------------------------
-// Turtle3D — L-system interpreter
+// Turtle2D — 2D L-system interpreter with animation
 // ---------------------------------------------------------------------------
-class Turtle3D {
+class Turtle2D {
   /**
-   * @param {THREE.Scene} scene
+   * @param {CanvasRenderingContext2D} ctx
    * @param {object} opts
    */
-  constructor(scene, opts = {}) {
-    this.scene = scene;
+  constructor(ctx, opts = {}) {
+    this.ctx = ctx;
 
-    this.stepLen    = opts.stepLen    ?? 0.32;
-    this.angle      = opts.angle      ?? 26;     // degrees
-    this.trunkR     = opts.trunkR     ?? 0.065;
-    this.minR       = opts.minR       ?? 0.008;
-    this.leafSize   = opts.leafSize   ?? 0.18;
-    this.jitter     = opts.jitter     ?? 0.15;   // random angle noise
+    this.stepLen    = opts.stepLen    ?? 30;       // pixels
+    this.angle      = opts.angle      ?? 26;       // degrees
+    this.trunkWidth = opts.trunkWidth ?? 8;        // pixels
+    this.minWidth   = opts.minWidth   ?? 1;        // pixels
+    this.leafSize   = opts.leafSize   ?? 6;        // pixels
+    this.jitter     = opts.jitter     ?? 0.15;     // random angle noise
+
+    // Animation state
+    this._animationFrame = null;
+    this._animating = false;
+    this._drawCommands = [];
+    this._currentCommandIndex = 0;
 
     // Stack for save/restore
     this._stack = [];
 
-    // Shared geometry/materials for instancing efficiency
-    this._branchMat = new THREE.MeshLambertMaterial({
-      color: 0x4a3728,
-    });
-    this._leafMat = new THREE.MeshLambertMaterial({
-      color: 0x2d6a3f,
-      side: THREE.DoubleSide,
-    });
-
-    // Meshes to be added
-    this._group = new THREE.Group();
-    scene.add(this._group);
-
     // State for progressive rendering
     this._progressiveState = null;
+
+    // Store last L-system for redraws
+    this._lastLsystem = null;
   }
 
   _rnd(range) {
@@ -577,15 +526,161 @@ class Turtle3D {
   }
 
   /**
+   * Clear the canvas with background color
+   */
+  clear() {
+    const canvas = this.ctx.canvas;
+    this.ctx.fillStyle = BACKGROUND_COLOR;
+    this.ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  /**
+   * Convert L-system string to drawing commands
+   */
+  _parseToCommands(lsystem) {
+    const commands = [];
+    const canvas = this.ctx.canvas;
+
+    // Start at bottom center of canvas
+    let x = canvas.width / 2;
+    let y = canvas.height - 50;
+    let angle = -90; // pointing up
+    let depth = 0;
+
+    const stack = [];
+
+    for (const cmd of lsystem) {
+      switch (cmd) {
+        case "F": {
+          // Forward step — draw a branch
+          const width = Math.max(
+            this.minWidth,
+            this.trunkWidth * Math.pow(0.72, depth)
+          );
+          const len = this.stepLen * (0.85 + Math.random() * 0.3);
+          const angleWithJitter = angle + this._rnd(this.jitter * 15);
+
+          const newX = x + len * Math.cos(angleWithJitter * Math.PI / 180);
+          const newY = y + len * Math.sin(angleWithJitter * Math.PI / 180);
+
+          commands.push({
+            type: "branch",
+            x1: x, y1: y,
+            x2: newX, y2: newY,
+            width: width,
+            depth: depth
+          });
+
+          x = newX;
+          y = newY;
+
+          // Slight random angle drift for organic feel
+          angle += this._rnd(8);
+          break;
+        }
+
+        case "L": {
+          // Leaf node
+          commands.push({
+            type: "leaf",
+            x: x,
+            y: y,
+            size: this.leafSize * (0.8 + Math.random() * 0.4),
+            rotation: Math.random() * Math.PI * 2
+          });
+          break;
+        }
+
+        case "[": {
+          // Save state
+          stack.push({ x, y, angle, depth });
+          depth++;
+          angle -= this.angle + this._rnd(this.jitter * this.angle);
+          angle += this._rnd(60);
+          break;
+        }
+
+        case "]": {
+          // Restore state
+          const state = stack.pop();
+          if (state) {
+            x = state.x;
+            y = state.y;
+            angle = state.angle;
+            depth = state.depth;
+          }
+          break;
+        }
+
+        case "+": {
+          angle += this.angle;
+          break;
+        }
+
+        case "-": {
+          angle -= this.angle;
+          break;
+        }
+      }
+    }
+
+    return commands;
+  }
+
+  /**
+   * Draw a single command
+   */
+  _drawCommand(cmd) {
+    const ctx = this.ctx;
+
+    if (cmd.type === "branch") {
+      // Draw branch as a tapered line
+      ctx.strokeStyle = BRANCH_COLOR;
+      ctx.lineWidth = cmd.width;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(cmd.x1, cmd.y1);
+      ctx.lineTo(cmd.x2, cmd.y2);
+      ctx.stroke();
+    } else if (cmd.type === "leaf") {
+      // Draw leaf as a filled circle
+      ctx.fillStyle = LEAF_COLOR;
+      ctx.beginPath();
+      ctx.arc(cmd.x, cmd.y, cmd.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /**
+   * Draw all commands immediately (no animation)
+   */
+  drawImmediate(lsystem) {
+    this._lastLsystem = lsystem;
+    this.clear();
+    const commands = this._parseToCommands(lsystem);
+
+    let branchCount = 0;
+    let leafCount = 0;
+
+    for (const cmd of commands) {
+      this._drawCommand(cmd);
+      if (cmd.type === "branch") branchCount++;
+      if (cmd.type === "leaf") leafCount++;
+    }
+
+    console.log(`[${new Date().toISOString()}] Drew ${branchCount} branches and ${leafCount} leaves`);
+  }
+
+  /**
    * Initialize or reset the progressive rendering state.
    */
   startProgressive() {
-    this._group.clear();
+    this.clear();
     this._stack = [];
     this._progressiveState = {
-      pos: new THREE.Vector3(0, 0, 0),
-      dir: new THREE.Vector3(0, 1, 0),
-      right: new THREE.Vector3(1, 0, 0),
+      x: this.ctx.canvas.width / 2,
+      y: this.ctx.canvas.height - 50,
+      angle: -90,
       depth: 0,
       branchCount: 0,
       leafCount: 0
@@ -602,117 +697,87 @@ class Turtle3D {
     }
 
     const state = this._progressiveState;
-
-    const pitchBy = (angleDeg) => {
-      const rad = THREE.MathUtils.degToRad(angleDeg + this._rnd(this.jitter * angleDeg));
-      state.dir.applyAxisAngle(state.right, rad).normalize();
-    };
-
-    const yawBy = (angleDeg) => {
-      const rad = THREE.MathUtils.degToRad(angleDeg + this._rnd(this.jitter * angleDeg));
-      state.dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), rad).normalize();
-      state.right.applyAxisAngle(new THREE.Vector3(0, 1, 0), rad).normalize();
-    };
-
-    const push = () => {
-      this._stack.push({
-        pos: state.pos.clone(),
-        dir: state.dir.clone(),
-        right: state.right.clone(),
-        depth: state.depth
-      });
-    };
-
-    const pop = () => {
-      const s = this._stack.pop();
-      if (s) {
-        state.pos = s.pos;
-        state.dir = s.dir;
-        state.right = s.right;
-        state.depth = s.depth;
-      }
-    };
+    const ctx = this.ctx;
 
     for (const cmd of lsystemChunk) {
       switch (cmd) {
-
         case "F": {
-          // Forward step — draw a branch cylinder
+          // Forward step — draw a branch
           state.branchCount++;
-          const radius = Math.max(
-            this.minR,
-            this.trunkR * Math.pow(0.72, state.depth)
+          const width = Math.max(
+            this.minWidth,
+            this.trunkWidth * Math.pow(0.72, state.depth)
           );
           const len = this.stepLen * (0.85 + Math.random() * 0.3);
-          const end = state.pos.clone().addScaledVector(state.dir, len);
+          const angleWithJitter = state.angle + this._rnd(this.jitter * 15);
 
-          // Build cylinder aligned along the segment
-          const midPoint = state.pos.clone().lerp(end, 0.5);
-          const segDir = end.clone().sub(state.pos).normalize();
-          const cylGeo = new THREE.CylinderGeometry(radius * 0.82, radius, len, 6, 1);
-          const mesh = new THREE.Mesh(cylGeo, this._branchMat);
-          mesh.castShadow = true;
+          const newX = state.x + len * Math.cos(angleWithJitter * Math.PI / 180);
+          const newY = state.y + len * Math.sin(angleWithJitter * Math.PI / 180);
 
-          // Orient cylinder: default Y-up → align with segDir
-          mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), segDir);
-          mesh.position.copy(midPoint);
+          // Draw branch
+          ctx.strokeStyle = BRANCH_COLOR;
+          ctx.lineWidth = width;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(state.x, state.y);
+          ctx.lineTo(newX, newY);
+          ctx.stroke();
 
-          this._group.add(mesh);
-          state.pos.copy(end);
+          state.x = newX;
+          state.y = newY;
 
-          // Slight random yaw drift for organic feel
-          yawBy(this._rnd(8));
+          // Slight random angle drift
+          state.angle += this._rnd(8);
           break;
         }
 
         case "L": {
-          // Leaf node — small flat disc/sphere
+          // Leaf node
           state.leafCount++;
-          const t = Math.random();
-          let geo;
-          if (t < 0.5) {
-            geo = new THREE.SphereGeometry(this.leafSize * (0.6 + Math.random() * 0.8), 5, 4);
-          } else {
-            geo = new THREE.PlaneGeometry(
-              this.leafSize * (0.8 + Math.random() * 0.6),
-              this.leafSize * (0.8 + Math.random() * 0.6)
-            );
-          }
-          const leaf = new THREE.Mesh(geo, this._leafMat);
-          leaf.position.copy(state.pos);
-          // Random orientation
-          leaf.rotation.set(
-            Math.random() * Math.PI,
-            Math.random() * Math.PI * 2,
-            Math.random() * Math.PI
-          );
-          leaf.castShadow = true;
-          this._group.add(leaf);
+          const size = this.leafSize * (0.8 + Math.random() * 0.4);
+
+          ctx.fillStyle = LEAF_COLOR;
+          ctx.beginPath();
+          ctx.arc(state.x, state.y, size, 0, Math.PI * 2);
+          ctx.fill();
           break;
         }
 
-        case "[":
-          push();
+        case "[": {
+          // Push state
+          this._stack.push({
+            x: state.x,
+            y: state.y,
+            angle: state.angle,
+            depth: state.depth
+          });
           state.depth++;
-          pitchBy(this.angle);
-          yawBy(this._rnd(60));
+          state.angle -= this.angle + this._rnd(this.jitter * this.angle);
+          state.angle += this._rnd(60);
           break;
+        }
 
-        case "]":
-          pop();
-          state.depth = Math.max(0, state.depth - 1);
+        case "]": {
+          // Pop state
+          const s = this._stack.pop();
+          if (s) {
+            state.x = s.x;
+            state.y = s.y;
+            state.angle = s.angle;
+            state.depth = s.depth;
+          }
           break;
+        }
 
-        case "+":
-          pitchBy(-this.angle);
+        case "+": {
+          state.angle += this.angle;
           break;
+        }
 
-        case "-":
-          pitchBy(this.angle);
+        case "-": {
+          state.angle -= this.angle;
           break;
-
-        default:
-          break;
+        }
       }
     }
   }
@@ -731,139 +796,63 @@ class Turtle3D {
   }
 
   /**
-   * Interpret the L-system string and build geometry.
+   * Interpret the L-system string and render with animation.
    * @param {string} lsystem
    */
   interpret(lsystem) {
-    console.log(`[${new Date().toISOString()}] Turtle3D.interpret() started`);
+    console.log(`[${new Date().toISOString()}] Turtle2D.interpret() started`);
     console.log(`[${new Date().toISOString()}] L-system string: "${lsystem}"`);
 
-    // Remove old tree
-    this._group.clear();
+    this._lastLsystem = lsystem;
 
-    // Turtle state
-    let pos   = new THREE.Vector3(0, 0, 0);
-    let dir   = new THREE.Vector3(0, 1, 0);   // up
-    let right = new THREE.Vector3(1, 0, 0);
-    let depth = 0;  // bracket nesting depth
+    // Stop any current animation
+    if (this._animationFrame) {
+      cancelAnimationFrame(this._animationFrame);
+      this._animating = false;
+    }
+
+    // Parse L-system into drawing commands
+    this._drawCommands = this._parseToCommands(lsystem);
+    this._currentCommandIndex = 0;
+
+    // Clear canvas
+    this.clear();
+
+    // Start animation
+    this._animating = true;
+    this._animate();
 
     const maxDepth = lsystem.split("[").length - 1;
     console.log(`[${new Date().toISOString()}] Max branch depth: ${maxDepth}`);
+  }
 
-    const push = () => {
-      this._stack.push({ pos: pos.clone(), dir: dir.clone(), right: right.clone(), depth });
-    };
-    const pop = () => {
-      const s = this._stack.pop();
-      if (s) ({ pos, dir, right, depth } = s);
-    };
+  /**
+   * Animation loop - draws commands one at a time
+   */
+  _animate() {
+    if (!this._animating || this._currentCommandIndex >= this._drawCommands.length) {
+      this._animating = false;
 
-    /** Rotate dir around the turtle's right axis by angleDeg. */
-    const pitchBy = (angleDeg) => {
-      const rad = THREE.MathUtils.degToRad(angleDeg + this._rnd(this.jitter * angleDeg));
-      dir.applyAxisAngle(right, rad).normalize();
-    };
-
-    /** Rotate dir around the world Y axis by angleDeg. */
-    const yawBy = (angleDeg) => {
-      const rad = THREE.MathUtils.degToRad(angleDeg + this._rnd(this.jitter * angleDeg));
-      dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), rad).normalize();
-      right.applyAxisAngle(new THREE.Vector3(0, 1, 0), rad).normalize();
-    };
-
-    let branchCount = 0;
-    let leafCount = 0;
-
-    for (const cmd of lsystem) {
-      switch (cmd) {
-
-        case "F": {
-          // Forward step — draw a branch cylinder
-          branchCount++;
-          const radius = Math.max(
-            this.minR,
-            this.trunkR * Math.pow(0.72, depth)
-          );
-          const len = this.stepLen * (0.85 + Math.random() * 0.3);
-          const end = pos.clone().addScaledVector(dir, len);
-
-          // Build cylinder aligned along the segment
-          const midPoint = pos.clone().lerp(end, 0.5);
-          const segDir = end.clone().sub(pos).normalize();
-          const cylGeo = new THREE.CylinderGeometry(radius * 0.82, radius, len, 6, 1);
-          const mesh = new THREE.Mesh(cylGeo, this._branchMat);
-          mesh.castShadow = true;
-
-          // Orient cylinder: default Y-up → align with segDir
-          mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), segDir);
-          mesh.position.copy(midPoint);
-
-          this._group.add(mesh);
-          pos.copy(end);
-
-          // Slight random yaw drift for organic feel
-          yawBy(this._rnd(8));
-          break;
-        }
-
-        case "L": {
-          // Leaf node — small flat disc/sphere
-          leafCount++;
-          const t = Math.random();
-          let geo;
-          if (t < 0.5) {
-            geo = new THREE.SphereGeometry(this.leafSize * (0.6 + Math.random() * 0.8), 5, 4);
-          } else {
-            geo = new THREE.PlaneGeometry(
-              this.leafSize * (0.8 + Math.random() * 0.6),
-              this.leafSize * (0.8 + Math.random() * 0.6)
-            );
-          }
-          const leaf = new THREE.Mesh(geo, this._leafMat);
-          leaf.position.copy(pos);
-          // Random orientation
-          leaf.rotation.set(
-            Math.random() * Math.PI,
-            Math.random() * Math.PI * 2,
-            Math.random() * Math.PI
-          );
-          leaf.castShadow = true;
-          this._group.add(leaf);
-          break;
-        }
-
-        case "[":
-          push();
-          depth++;
-          pitchBy(this.angle);
-          yawBy(this._rnd(60));
-          break;
-
-        case "]":
-          pop();
-          depth = Math.max(0, depth - 1);
-          break;
-
-        case "+":
-          pitchBy(-this.angle);
-          break;
-
-        case "-":
-          pitchBy(this.angle);
-          break;
-
-        default:
-          break;
-      }
+      // Log stats when done
+      const branchCount = this._drawCommands.filter(c => c.type === "branch").length;
+      const leafCount = this._drawCommands.filter(c => c.type === "leaf").length;
+      console.log(`[${new Date().toISOString()}] Turtle2D.interpret() completed`);
+      console.log(`[${new Date().toISOString()}] Rendered ${branchCount} branches and ${leafCount} leaves`);
+      console.log(`[${new Date().toISOString()}] Total commands: ${this._drawCommands.length}`);
+      return;
     }
 
-    console.log(`[${new Date().toISOString()}] Turtle3D.interpret() completed`);
-    console.log(`[${new Date().toISOString()}] Rendered ${branchCount} branches and ${leafCount} leaves`);
-    console.log(`[${new Date().toISOString()}] Total meshes in scene: ${this._group.children.length}`);
+    // Draw next few commands (batch for smoother animation)
+    const commandsPerFrame = 3;
+    for (let i = 0; i < commandsPerFrame && this._currentCommandIndex < this._drawCommands.length; i++) {
+      this._drawCommand(this._drawCommands[this._currentCommandIndex]);
+      this._currentCommandIndex++;
+    }
+
+    // Schedule next frame
+    this._animationFrame = requestAnimationFrame(() => this._animate());
   }
 }
-
-let turtle = null;
 
 // ---------------------------------------------------------------------------
 // Helper: Strip markdown code fences from generated code
@@ -924,13 +913,8 @@ btnGrow.addEventListener("click", async () => {
     vizHint.innerHTML = `🌱 Rendering ${node_count} AST nodes…`;
 
     // Build the bonsai
-    if (!turtle) turtle = new Turtle3D(scene);
+    if (!turtle) turtle = new Turtle2D(ctx);
     turtle.interpret(lsystem);
-
-    // Focus camera on tree
-    controls.target.set(0, 4, 0);
-    camera.position.set(0, 6, 14);
-    controls.update();
 
     vizHint.classList.add("hidden");
 
@@ -943,4 +927,4 @@ btnGrow.addEventListener("click", async () => {
 });
 
 // Exported for testing
-export { checkLmStudioHealth, Turtle3D, stripMarkdownFences };
+export { checkLmStudioHealth, Turtle2D, stripMarkdownFences };
