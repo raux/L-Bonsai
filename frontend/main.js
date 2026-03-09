@@ -630,6 +630,7 @@ function stripMarkdownFences(code) {
 // Grow Bonsai (Pane 2 → Backend → Pane 3)
 // ---------------------------------------------------------------------------
 btnGrow.addEventListener("click", async () => {
+  console.log(`[${new Date().toISOString()}] Grow Bonsai button clicked`);
   let code = codeOutput.value.trim();
   if (!code) {
     codeOutput.focus();
