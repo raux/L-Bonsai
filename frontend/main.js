@@ -489,6 +489,9 @@ class Turtle3D {
    * @param {string} lsystem
    */
   interpret(lsystem) {
+    console.log(`[${new Date().toISOString()}] Turtle3D.interpret() started`);
+    console.log(`[${new Date().toISOString()}] L-system string: "${lsystem}"`);
+
     // Remove old tree
     this._group.clear();
 
@@ -499,6 +502,7 @@ class Turtle3D {
     let depth = 0;  // bracket nesting depth
 
     const maxDepth = lsystem.split("[").length - 1;
+    console.log(`[${new Date().toISOString()}] Max branch depth: ${maxDepth}`);
 
     const push = () => {
       this._stack.push({ pos: pos.clone(), dir: dir.clone(), right: right.clone(), depth });
@@ -521,11 +525,15 @@ class Turtle3D {
       right.applyAxisAngle(new THREE.Vector3(0, 1, 0), rad).normalize();
     };
 
+    let branchCount = 0;
+    let leafCount = 0;
+
     for (const cmd of lsystem) {
       switch (cmd) {
 
         case "F": {
           // Forward step — draw a branch cylinder
+          branchCount++;
           const radius = Math.max(
             this.minR,
             this.trunkR * Math.pow(0.72, depth)
@@ -554,6 +562,7 @@ class Turtle3D {
 
         case "L": {
           // Leaf node — small flat disc/sphere
+          leafCount++;
           const t = Math.random();
           let geo;
           if (t < 0.5) {
@@ -601,6 +610,10 @@ class Turtle3D {
           break;
       }
     }
+
+    console.log(`[${new Date().toISOString()}] Turtle3D.interpret() completed`);
+    console.log(`[${new Date().toISOString()}] Rendered ${branchCount} branches and ${leafCount} leaves`);
+    console.log(`[${new Date().toISOString()}] Total meshes in scene: ${this._group.children.length}`);
   }
 }
 
@@ -630,6 +643,7 @@ function stripMarkdownFences(code) {
 // Grow Bonsai (Pane 2 → Backend → Pane 3)
 // ---------------------------------------------------------------------------
 btnGrow.addEventListener("click", async () => {
+  console.log(`[${new Date().toISOString()}] Grow Bonsai button clicked`);
   let code = codeOutput.value.trim();
   if (!code) {
     codeOutput.focus();
@@ -658,6 +672,9 @@ btnGrow.addEventListener("click", async () => {
     }
 
     const { lsystem, node_count } = await resp.json();
+
+    console.log(`[${new Date().toISOString()}] L-system received from backend:`, lsystem);
+    console.log(`[${new Date().toISOString()}] AST node count: ${node_count}, L-system length: ${lsystem.length}`);
 
     vizHint.innerHTML = `🌱 Rendering ${node_count} AST nodes…`;
 
