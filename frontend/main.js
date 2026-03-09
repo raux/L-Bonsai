@@ -155,21 +155,25 @@ let healthCheckInterval = null;
 
 // Initialize URL input with saved value or default (only if element exists)
 if (lmStudioUrlInput) {
-  lmStudioUrlInput.value = localStorage.getItem("lmStudioUrl") || "http://localhost:1234";
+  const savedUrl = localStorage.getItem("lmStudioUrl") || "http://localhost:1234";
+  lmStudioUrlInput.value = savedUrl;
+  // Update module-level LM_STUDIO_URL with saved/default value
+  LM_STUDIO_URL = `${savedUrl}/v1`;
 
   // Update LM_STUDIO_URL when input changes
   lmStudioUrlInput.addEventListener("input", () => {
     const baseUrl = lmStudioUrlInput.value.trim();
     localStorage.setItem("lmStudioUrl", baseUrl);
+    // Update module-level variable immediately
+    LM_STUDIO_URL = baseUrl ? `${baseUrl}/v1` : "http://localhost:1234/v1";
   });
 }
 
 async function fetchAvailableModels() {
   try {
-    const baseUrl = lmStudioUrlInput ? lmStudioUrlInput.value.trim() : "http://localhost:1234";
-    if (!baseUrl) return [];
+    if (!LM_STUDIO_URL) return [];
 
-    const resp = await fetch(`${baseUrl}/v1/models`, { signal: AbortSignal.timeout(2500) });
+    const resp = await fetch(`${LM_STUDIO_URL}/models`, { signal: AbortSignal.timeout(2500) });
     if (!resp.ok) return [];
 
     const data = await resp.json();
