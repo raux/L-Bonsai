@@ -724,14 +724,37 @@ class Turtle3D {
 let turtle = null;
 
 // ---------------------------------------------------------------------------
+// Helper: Strip markdown code fences from generated code
+// ---------------------------------------------------------------------------
+/**
+ * Remove markdown code fences (```python, ```, etc.) from code string.
+ * LLMs sometimes include these despite instructions not to.
+ * @param {string} code - The code potentially wrapped in fences
+ * @returns {string} - Clean code without fences
+ */
+function stripMarkdownFences(code) {
+  // Match opening fence: ``` or ```python or ```py, etc.
+  // Then capture everything until closing ```
+  const fencePattern = /^```(?:python|py)?\s*\n([\s\S]*?)\n```$/;
+  const match = code.match(fencePattern);
+  if (match) {
+    return match[1];
+  }
+  return code;
+}
+
+// ---------------------------------------------------------------------------
 // Grow Bonsai (Pane 2 → Backend → Pane 3)
 // ---------------------------------------------------------------------------
 btnGrow.addEventListener("click", async () => {
-  const code = codeOutput.value.trim();
+  let code = codeOutput.value.trim();
   if (!code) {
     codeOutput.focus();
     return;
   }
+
+  // Strip markdown code fences if present
+  code = stripMarkdownFences(code);
 
   playSfx("click");
   btnGrow.disabled = true;
@@ -776,4 +799,4 @@ btnGrow.addEventListener("click", async () => {
 });
 
 // Exported for testing
-export { checkLmStudioHealth, Turtle3D };
+export { checkLmStudioHealth, Turtle3D, stripMarkdownFences };
