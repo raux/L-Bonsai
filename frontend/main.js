@@ -465,6 +465,9 @@ const BACKGROUND_COLOR = "#0d1117";
 const BRANCH_COLOR = "#4a3728";
 const LEAF_COLOR = "#2d6a3f";
 
+// Turtle instance (initialized later after Turtle2D class is defined)
+let turtle = null;
+
 // Resize handler
 function resizeCanvas() {
   const canvas = bonsaiCanvas;
@@ -851,8 +854,6 @@ class Turtle2D {
   }
 }
 
-let turtle = null;
-
 // ---------------------------------------------------------------------------
 // Helper: Strip markdown code fences from generated code
 // ---------------------------------------------------------------------------
@@ -926,4 +927,4 @@ btnGrow.addEventListener("click", async () => {
 });
 
 // Exported for testing
-export { checkLmStudioHealth, Turtle3D, stripMarkdownFences };
+export { checkLmStudioHealth, Turtle2D, stripMarkdownFences };

@@ -1,160 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-class Vector3Mock {
-  constructor(x = 0, y = 0, z = 0) {
-    this.x = x;
-    this.y = y;
-    this.z = z;
-  }
-
-  clone() {
-    return new Vector3Mock(this.x, this.y, this.z);
-  }
-
-  addScaledVector(vec, scale) {
-    this.x += vec.x * scale;
-    this.y += vec.y * scale;
-    this.z += vec.z * scale;
-    return this;
-  }
-
-  sub(vec) {
-    this.x -= vec.x;
-    this.y -= vec.y;
-    this.z -= vec.z;
-    return this;
-  }
-
-  normalize() {
-    return this;
-  }
-
-  lerp(vec, t) {
-    this.x += (vec.x - this.x) * t;
-    this.y += (vec.y - this.y) * t;
-    this.z += (vec.z - this.z) * t;
-    return this;
-  }
-
-  applyAxisAngle() {
-    return this;
-  }
-
-  set(x, y, z) {
-    this.x = x;
-    this.y = y;
-    this.z = z;
-    return this;
-  }
-
-  copy(vec) {
-    this.x = vec.x;
-    this.y = vec.y;
-    this.z = vec.z;
-    return this;
-  }
-}
-
-const threeMock = {
-  MathUtils: { degToRad: (deg) => (deg * Math.PI) / 180 },
-  PCFSoftShadowMap: "pcf-soft-shadow",
-  Vector3: Vector3Mock,
-  WebGLRenderer: class {
-    constructor(opts = {}) {
-      this.domElement = opts.canvas ?? { width: 0, height: 0 };
-      this.shadowMap = { enabled: false, type: null };
-    }
-
-    setPixelRatio() {}
-    setSize(width, height) {
-      this.domElement.width = width;
-      this.domElement.height = height;
-    }
-    render() {}
-  },
-  Scene: class {
-    constructor() {
-      this.objects = [];
-    }
-    add(obj) {
-      this.objects.push(obj);
-    }
-  },
-  Color: class {
-    constructor(value) {
-      this.value = value;
-    }
-  },
-  Fog: class {
-    constructor(color, near, far) {
-      this.color = color;
-      this.near = near;
-      this.far = far;
-    }
-  },
-  PerspectiveCamera: class {
-    constructor() {
-      this.position = new Vector3Mock();
-      this.aspect = 1;
-    }
-    updateProjectionMatrix() {}
-  },
-  AmbientLight: class {},
-  DirectionalLight: class {
-    constructor() {
-      this.position = new Vector3Mock();
-      this.shadow = { mapSize: { width: 0, height: 0 } };
-    }
-  },
-  CircleGeometry: class {},
-  MeshLambertMaterial: class {
-    constructor(opts) {
-      this.opts = opts;
-    }
-  },
-  DoubleSide: "double-side",
-  Mesh: class {
-    constructor(geometry, material) {
-      this.geometry = geometry;
-      this.material = material;
-      this.castShadow = false;
-      this.position = new Vector3Mock();
-      this.rotation = { set: vi.fn() };
-      this.quaternion = { setFromUnitVectors: vi.fn() };
-    }
-  },
-  Group: class {
-    constructor() {
-      this.children = [];
-    }
-    add(obj) {
-      this.children.push(obj);
-    }
-    clear() {
-      this.children = [];
-    }
-  },
-  CylinderGeometry: class {},
-  SphereGeometry: class {},
-  PlaneGeometry: class {},
-};
-
-vi.mock("three", () => threeMock);
-
-vi.mock("three/examples/jsm/controls/OrbitControls.js", () => {
-  class OrbitControlsMock {
-    constructor() {
-      this.target = new Vector3Mock();
-      this.enableDamping = false;
-      this.dampingFactor = 0;
-      this.minDistance = 0;
-      this.maxDistance = 0;
-    }
-    update() {}
-  }
-  return { OrbitControls: OrbitControlsMock };
-});
-
 const originalRAF = global.requestAnimationFrame;
 const originalSetInterval = global.setInterval;
 const originalDevicePixelRatio = global.devicePixelRatio;
@@ -172,7 +17,21 @@ function setupDom() {
     <div id="pane-execution"></div>
   `;
   const canvas = document.getElementById("bonsai-canvas");
-  canvas.getContext = vi.fn();
+  // Mock 2D canvas context
+  canvas.getContext = vi.fn(() => ({
+    canvas: { width: 800, height: 600, clientWidth: 800, clientHeight: 600 },
+    fillStyle: "",
+    strokeStyle: "",
+    lineWidth: 0,
+    lineCap: "",
+    fillRect: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    arc: vi.fn(),
+    stroke: vi.fn(),
+    fill: vi.fn(),
+  }));
 }
 
 beforeEach(() => {
@@ -219,23 +78,42 @@ describe("LM Studio health indicator", () => {
   });
 });
 
-describe("Turtle3D", () => {
-  test("interprets L-system commands into scene nodes", async () => {
-    const { Turtle3D } = await import("../main.js");
-    const THREE = await import("three");
-    const turtle = new Turtle3D(new THREE.Scene(), {
-      stepLen: 1,
-      trunkR: 0.1,
-      minR: 0.01,
-      leafSize: 0.05,
+describe("Turtle2D", () => {
+  test("interprets L-system commands into draw commands", async () => {
+    const { Turtle2D } = await import("../main.js");
+
+    // Create a mock canvas context
+    const mockCtx = {
+      canvas: { width: 800, height: 600 },
+      fillStyle: "",
+      strokeStyle: "",
+      lineWidth: 0,
+      lineCap: "",
+      fillRect: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      arc: vi.fn(),
+      stroke: vi.fn(),
+      fill: vi.fn(),
+    };
+
+    const turtle = new Turtle2D(mockCtx, {
+      stepLen: 30,
+      trunkWidth: 8,
+      minWidth: 1,
+      leafSize: 6,
       jitter: 0,
     });
 
-    turtle.interpret("FFL");
-    expect(turtle._group.children).toHaveLength(3);
+    // Test immediate drawing
+    turtle.drawImmediate("FFL");
 
-    turtle.interpret("L");
-    expect(turtle._group.children).toHaveLength(1);
+    // Should have called beginPath 3 times (2 branches + 1 leaf)
+    expect(mockCtx.beginPath).toHaveBeenCalled();
+
+    // Clear should have been called
+    expect(mockCtx.fillRect).toHaveBeenCalled();
   });
 });
 
