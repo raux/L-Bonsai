@@ -653,7 +653,6 @@ btnGrow.addEventListener("click", async () => {
   // Strip markdown code fences if present
   code = stripMarkdownFences(code);
 
-  playSfx("click");
   btnGrow.disabled = true;
   btnGrow.innerHTML = '<span class="btn-icon">⏳</span> Growing…';
   vizHint.classList.remove("hidden");
