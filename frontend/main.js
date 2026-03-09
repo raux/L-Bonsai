@@ -302,6 +302,19 @@ btnGenerate.addEventListener("click", async () => {
   statusLight.className = "status-light amber";
   statusText.textContent = "Connecting…";
 
+  // Initialize turtle for progressive rendering
+  if (!turtle) turtle = new Turtle3D(scene);
+  turtle.startProgressive();
+
+  // Camera setup for viewing
+  controls.target.set(0, 4, 0);
+  camera.position.set(0, 6, 14);
+  controls.update();
+
+  let accumulatedCode = "";
+  let lastBonsaiUpdate = 0;
+  const BONSAI_UPDATE_INTERVAL = 500; // Update bonsai every 500ms
+
   try {
     const resp = await fetch(`${LM_STUDIO_URL}/chat/completions`, {
       method: "POST",
@@ -352,13 +365,26 @@ btnGenerate.addEventListener("click", async () => {
           const delta = json.choices?.[0]?.delta?.content;
           if (delta) {
             codeOutput.value += delta;
+            accumulatedCode += delta;
             // Auto-scroll to bottom
             codeOutput.scrollTop = codeOutput.scrollHeight;
+
+            // Update bonsai periodically as code streams in
+            const now = Date.now();
+            if (now - lastBonsaiUpdate > BONSAI_UPDATE_INTERVAL) {
+              lastBonsaiUpdate = now;
+              updateBonsaiFromCode(accumulatedCode);
+            }
           }
         } catch {
           /* skip malformed chunk */
         }
       }
+    }
+
+    // Final update after streaming completes
+    if (accumulatedCode.trim()) {
+      updateBonsaiFromCode(accumulatedCode);
     }
 
   } catch (err) {
@@ -373,6 +399,69 @@ btnGenerate.addEventListener("click", async () => {
     paneExecution.classList.remove("generating");
   }
 });
+
+/**
+ * Update the bonsai visualization from the current code.
+ * This is called periodically during streaming to show real-time growth.
+ */
+async function updateBonsaiFromCode(code) {
+  const cleanCode = stripMarkdownFences(code.trim());
+  if (!cleanCode) return;
+
+  try {
+    const resp = await fetch(`${BACKEND_URL}/stream-bonsai`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: cleanCode }),
+    });
+
+    if (!resp.ok) return; // Silently fail for streaming updates
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+
+    // Clear and restart for each update (could be optimized to be truly incremental)
+    turtle.startProgressive();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const raw = decoder.decode(value, { stream: true });
+      const lines = raw.split("\n").filter(l => l.startsWith("data: "));
+
+      for (const line of lines) {
+        const data = line.slice(6).trim();
+        if (!data || data === "{}") continue;
+
+        try {
+          const json = JSON.parse(data);
+
+          if (json.lsystem_chunk) {
+            // Render this chunk immediately
+            turtle.interpretProgressive(json.lsystem_chunk);
+          }
+
+          if (json.complete) {
+            const stats = turtle.endProgressive();
+            if (stats) {
+              console.log(`[${new Date().toISOString()}] Real-time bonsai: ${stats.branchCount} branches, ${stats.leafCount} leaves`);
+            }
+          }
+
+          if (json.error) {
+            console.log(`[${new Date().toISOString()}] Bonsai generation error: ${json.error}`);
+          }
+        } catch {
+          /* skip malformed chunk */
+        }
+      }
+    }
+  } catch (err) {
+    // Silently fail for streaming updates - don't interrupt code generation
+    console.log(`[${new Date().toISOString()}] Bonsai update failed: ${err.message}`);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Three.js Scene Setup
@@ -478,10 +567,167 @@ class Turtle3D {
     // Meshes to be added
     this._group = new THREE.Group();
     scene.add(this._group);
+
+    // State for progressive rendering
+    this._progressiveState = null;
   }
 
   _rnd(range) {
     return (Math.random() - 0.5) * 2 * range;
+  }
+
+  /**
+   * Initialize or reset the progressive rendering state.
+   */
+  startProgressive() {
+    this._group.clear();
+    this._stack = [];
+    this._progressiveState = {
+      pos: new THREE.Vector3(0, 0, 0),
+      dir: new THREE.Vector3(0, 1, 0),
+      right: new THREE.Vector3(1, 0, 0),
+      depth: 0,
+      branchCount: 0,
+      leafCount: 0
+    };
+  }
+
+  /**
+   * Interpret a chunk of L-system commands progressively.
+   * @param {string} lsystemChunk - L-system commands to interpret
+   */
+  interpretProgressive(lsystemChunk) {
+    if (!this._progressiveState) {
+      this.startProgressive();
+    }
+
+    const state = this._progressiveState;
+
+    const pitchBy = (angleDeg) => {
+      const rad = THREE.MathUtils.degToRad(angleDeg + this._rnd(this.jitter * angleDeg));
+      state.dir.applyAxisAngle(state.right, rad).normalize();
+    };
+
+    const yawBy = (angleDeg) => {
+      const rad = THREE.MathUtils.degToRad(angleDeg + this._rnd(this.jitter * angleDeg));
+      state.dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), rad).normalize();
+      state.right.applyAxisAngle(new THREE.Vector3(0, 1, 0), rad).normalize();
+    };
+
+    const push = () => {
+      this._stack.push({
+        pos: state.pos.clone(),
+        dir: state.dir.clone(),
+        right: state.right.clone(),
+        depth: state.depth
+      });
+    };
+
+    const pop = () => {
+      const s = this._stack.pop();
+      if (s) {
+        state.pos = s.pos;
+        state.dir = s.dir;
+        state.right = s.right;
+        state.depth = s.depth;
+      }
+    };
+
+    for (const cmd of lsystemChunk) {
+      switch (cmd) {
+
+        case "F": {
+          // Forward step — draw a branch cylinder
+          state.branchCount++;
+          const radius = Math.max(
+            this.minR,
+            this.trunkR * Math.pow(0.72, state.depth)
+          );
+          const len = this.stepLen * (0.85 + Math.random() * 0.3);
+          const end = state.pos.clone().addScaledVector(state.dir, len);
+
+          // Build cylinder aligned along the segment
+          const midPoint = state.pos.clone().lerp(end, 0.5);
+          const segDir = end.clone().sub(state.pos).normalize();
+          const cylGeo = new THREE.CylinderGeometry(radius * 0.82, radius, len, 6, 1);
+          const mesh = new THREE.Mesh(cylGeo, this._branchMat);
+          mesh.castShadow = true;
+
+          // Orient cylinder: default Y-up → align with segDir
+          mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), segDir);
+          mesh.position.copy(midPoint);
+
+          this._group.add(mesh);
+          state.pos.copy(end);
+
+          // Slight random yaw drift for organic feel
+          yawBy(this._rnd(8));
+          break;
+        }
+
+        case "L": {
+          // Leaf node — small flat disc/sphere
+          state.leafCount++;
+          const t = Math.random();
+          let geo;
+          if (t < 0.5) {
+            geo = new THREE.SphereGeometry(this.leafSize * (0.6 + Math.random() * 0.8), 5, 4);
+          } else {
+            geo = new THREE.PlaneGeometry(
+              this.leafSize * (0.8 + Math.random() * 0.6),
+              this.leafSize * (0.8 + Math.random() * 0.6)
+            );
+          }
+          const leaf = new THREE.Mesh(geo, this._leafMat);
+          leaf.position.copy(state.pos);
+          // Random orientation
+          leaf.rotation.set(
+            Math.random() * Math.PI,
+            Math.random() * Math.PI * 2,
+            Math.random() * Math.PI
+          );
+          leaf.castShadow = true;
+          this._group.add(leaf);
+          break;
+        }
+
+        case "[":
+          push();
+          state.depth++;
+          pitchBy(this.angle);
+          yawBy(this._rnd(60));
+          break;
+
+        case "]":
+          pop();
+          state.depth = Math.max(0, state.depth - 1);
+          break;
+
+        case "+":
+          pitchBy(-this.angle);
+          break;
+
+        case "-":
+          pitchBy(this.angle);
+          break;
+
+        default:
+          break;
+      }
+    }
+  }
+
+  /**
+   * End progressive rendering and return stats.
+   */
+  endProgressive() {
+    if (!this._progressiveState) return null;
+    const stats = {
+      branchCount: this._progressiveState.branchCount,
+      leafCount: this._progressiveState.leafCount
+    };
+    this._progressiveState = null;
+    return stats;
   }
 
   /**

@@ -9,10 +9,12 @@ render as an organic 3D bonsai tree.
 from __future__ import annotations
 
 import ast
+import asyncio
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 app = FastAPI(title="L-Bonsai API", version="1.0.0")
@@ -247,3 +249,101 @@ async def generate_bonsai(body: GenerateBonsaiRequest) -> GenerateBonsaiResponse
         node_count = 0
 
     return GenerateBonsaiResponse(lsystem=lsystem, node_count=node_count)
+
+
+def python_to_lsystem_incremental(source: str) -> str:
+    """
+    Parse *source* as Python code and return the L-system string.
+    This version attempts to parse incrementally and yields partial results.
+
+    Returns the L-system string for whatever valid Python constructs can be parsed.
+    """
+    # Try to parse the complete source first
+    try:
+        tree = ast.parse(source)
+        visitor = BonsaiVisitor()
+        visitor.commands = ["F", "F", "F"]
+        for node in tree.body:
+            visitor.visit(node)
+        return "".join(visitor.commands)
+    except SyntaxError:
+        # If full parse fails, try to parse line by line or statement by statement
+        # This handles partial/incomplete code during streaming
+        lines = source.strip().split('\n')
+        visitor = BonsaiVisitor()
+        visitor.commands = ["F", "F", "F"]
+
+        # Try to build up valid code incrementally
+        accumulated = ""
+        for line in lines:
+            accumulated += line + "\n"
+            try:
+                tree = ast.parse(accumulated)
+                # If successful, process this tree
+                visitor.commands = ["F", "F", "F"]
+                for node in tree.body:
+                    visitor.visit(node)
+            except SyntaxError:
+                # Skip this line, continue accumulating
+                continue
+
+        return "".join(visitor.commands)
+
+
+@app.post("/api/stream-bonsai")
+async def stream_bonsai(body: GenerateBonsaiRequest):
+    """
+    Accept raw Python source code and stream L-system commands incrementally
+    as the code is parsed. This enables real-time bonsai visualization.
+
+    Returns a stream of Server-Sent Events with L-system chunks.
+    """
+    async def generate():
+        code = body.code.strip()
+        if not code:
+            yield f"data: {{}}\n\n"
+            return
+
+        # Parse incrementally - yield L-system as we process each statement
+        try:
+            tree = ast.parse(code)
+        except SyntaxError as exc:
+            # Try incremental parsing for incomplete code
+            yield f'data: {{"error": "Python syntax error: {str(exc)}"}}\n\n'
+            return
+
+        visitor = BonsaiVisitor()
+
+        # Seed the trunk
+        trunk = "FFF"
+        visitor.commands = ["F", "F", "F"]
+        yield f'data: {{"lsystem_chunk": "{trunk}", "is_trunk": true}}\n\n'
+        await asyncio.sleep(0.05)  # Small delay for visual effect
+
+        # Process each top-level statement and yield incrementally
+        for i, node in enumerate(tree.body):
+            saved_commands = visitor.commands.copy()
+            visitor.visit(node)
+
+            # Get the new commands added by this node
+            new_commands = visitor.commands[len(saved_commands):]
+            chunk = "".join(new_commands)
+
+            if chunk:
+                yield f'data: {{"lsystem_chunk": "{chunk}", "node_index": {i}}}\n\n'
+                await asyncio.sleep(0.05)  # Small delay between chunks
+
+        # Final message
+        node_count = sum(1 for _ in ast.walk(tree))
+        final_lsystem = "".join(visitor.commands)
+        yield f'data: {{"complete": true, "node_count": {node_count}, "final_lsystem": "{final_lsystem}"}}\n\n'
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
