@@ -1,13 +1,30 @@
-# L-Bonsai — Code-to-Bonsai 3D Visualizer
+# L-Bonsai — Code-to-Bonsai Visualizer
 
-Transform Python source code into an organic 3D bonsai tree by mapping
+Transform Python source code into an organic bonsai tree by mapping
 Abstract Syntax Tree (AST) nodes to L-system turtle commands, rendered
-live in the browser with Three.js.
+with animated 2D canvas visualization in the browser.
+
+## Screenshots
+
+### Main Interface
+![L-Bonsai Main Interface](docs/screenshots/main-interface.png)
+
+The three-pane layout: Intent (requirements), Execution (Python code), and Visualization (bonsai tree).
+
+### Code to Bonsai
+![Code with Bonsai Visualization](docs/screenshots/bonsai-visualization.png)
+
+Python code automatically transformed into an animated bonsai tree visualization.
+
+### Bonsai Tree Detail
+![Bonsai Tree Close-up](docs/screenshots/bonsai-closeup.png)
+
+Each branch and leaf represents different Python AST nodes—functions, classes, loops, and more.
 
 ## Architecture
 
 ```
-frontend/   — Vite + Three.js UI (three-pane layout)
+frontend/   — Vite + Canvas 2D UI (three-pane layout)
 backend/    — FastAPI server (AST → L-system)
 ```
 
@@ -71,7 +88,7 @@ The app automatically polls LM Studio every 5 seconds to maintain connection sta
 |------|------|--------|
 | 1 | **Intent** | Paste `AGENT.md` requirements → click *Send to Local LLM* |
 | 2 | **Execution** | Review/edit streamed Python code → click *Grow Bonsai* |
-| 3 | **Visualization** | Interact with the 3D bonsai (orbit/zoom/pan) |
+| 3 | **Visualization** | Watch the animated 2D bonsai tree grow |
 
 ## AST → L-system Mapping
 
@@ -92,6 +109,5 @@ The app automatically polls LM Studio every 5 seconds to maintain connection sta
 ## Tech Stack
 
 - **Backend:** Python 3.11+, FastAPI, uvicorn
-- **Frontend:** Vite, Three.js (OrbitControls), ES6 modules
-- **Audio:** Web Audio API (procedural SFX + ambient drone)
+- **Frontend:** Vite, Canvas 2D API, ES6 modules
 - **LLM:** LM Studio (OpenAI-compatible local API)
