@@ -5,8 +5,7 @@
  *  1. LM Studio streaming integration (Pane 1 → Pane 2)
  *  2. Backend /api/generate-bonsai call (Pane 2 → Pane 3)
  *  3. Three.js 3D bonsai rendering with Turtle3D
- *  4. Ambient audio toggle + SFX
- *  5. LM Studio health-check status light
+ *  4. LM Studio health-check status light
  */
 
 import * as THREE from "three";
@@ -28,8 +27,6 @@ const btnGenerate  = document.getElementById("btn-generate");
 const btnGrow      = document.getElementById("btn-grow");
 const statusLight  = document.getElementById("status-light");
 const statusText   = document.getElementById("status-text");
-const audioToggle  = document.getElementById("audio-toggle");
-const audioIcon    = document.getElementById("audio-icon");
 const vizHint      = document.getElementById("viz-hint");
 const bonsaiCanvas = document.getElementById("bonsai-canvas");
 const paneExecution= document.getElementById("pane-execution");
@@ -38,116 +35,6 @@ const modelSelector = document.getElementById("model-selector");
 const connectBtn = document.getElementById("connect-btn");
 const connectionStatusBadge = document.getElementById("connection-status-badge");
 const connectionErrorMessage = document.getElementById("connection-error-message");
-
-// ---------------------------------------------------------------------------
-// Audio System
-// ---------------------------------------------------------------------------
-let audioCtx = null;
-let ambientNode = null;
-let ambientGain = null;
-let ambientPlaying = false;
-
-function getAudioCtx() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  return audioCtx;
-}
-
-/** Generate a short procedural chime/click SFX. */
-function playSfx(type = "click") {
-  const ctx = getAudioCtx();
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-
-  if (type === "click") {
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.08);
-    gain.gain.setValueAtTime(0.18, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.12);
-  } else if (type === "chime") {
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(523.25, ctx.currentTime);      // C5
-    gain.gain.setValueAtTime(0.22, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.55);
-  } else if (type === "grow") {
-    // Ascending arpeggio to celebrate bonsai growth
-    const notes = [261.63, 329.63, 392.0, 523.25]; // C4 E4 G4 C5
-    notes.forEach((freq, i) => {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      o.type = "sine";
-      o.frequency.value = freq;
-      const t = ctx.currentTime + i * 0.1;
-      g.gain.setValueAtTime(0.18, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-      o.start(t); o.stop(t + 0.4);
-    });
-    return;
-  }
-}
-
-/** Start/stop lofi ambient drone. */
-function startAmbient() {
-  const ctx = getAudioCtx();
-  ambientGain = ctx.createGain();
-  ambientGain.gain.setValueAtTime(0, ctx.currentTime);
-  ambientGain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 2);
-  ambientGain.connect(ctx.destination);
-
-  // Two layered detuned oscillators for a warm pad
-  const freqs = [55, 82.41];
-  freqs.forEach(f => {
-    const osc = ctx.createOscillator();
-    osc.type = "sawtooth";
-    osc.frequency.value = f;
-    // Slow LFO detune
-    const lfo = ctx.createOscillator();
-    lfo.type = "sine";
-    lfo.frequency.value = 0.15;
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 3;
-    lfo.connect(lfoGain);
-    lfoGain.connect(osc.detune);
-    lfo.start();
-
-    // Soft low-pass filter
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = 300;
-    osc.connect(filter);
-    filter.connect(ambientGain);
-    osc.start();
-  });
-
-  ambientPlaying = true;
-}
-
-function stopAmbient() {
-  if (ambientGain) {
-    const ctx = getAudioCtx();
-    ambientGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.5);
-  }
-  ambientPlaying = false;
-}
-
-audioToggle.addEventListener("click", () => {
-  if (ambientPlaying) {
-    stopAmbient();
-    audioIcon.textContent = "🔇";
-    audioToggle.classList.remove("active");
-  } else {
-    startAmbient();
-    audioIcon.textContent = "🔊";
-    audioToggle.classList.add("active");
-  }
-});
 
 // ---------------------------------------------------------------------------
 // LM Studio Health Check and Model Management
@@ -335,7 +222,6 @@ async function checkLmStudioHealth() {
 // Connect button handler
 if (connectBtn) {
   connectBtn.addEventListener("click", async () => {
-    playSfx("click");
     connectBtn.className = "header-btn connecting";
     connectBtn.innerHTML = '<span class="btn-icon">⏳</span><span class="btn-label">Connecting...</span>';
     if (statusLight) statusLight.className = "status-light amber";
@@ -359,7 +245,6 @@ if (connectBtn) {
         }
       }
 
-      playSfx("chime");
       showConnectionMessage('Successfully connected to LM Studio!', 'success');
       // Clear success message after 3 seconds
       setTimeout(() => showConnectionMessage(''), 3000);
@@ -408,7 +293,6 @@ btnGenerate.addEventListener("click", async () => {
   const prompt = agentInput.value.trim();
   if (!prompt) return;
 
-  playSfx("click");
   btnGenerate.disabled = true;
   btnGenerate.textContent = "⏳ Generating…";
   paneExecution.classList.add("generating");
@@ -477,7 +361,6 @@ btnGenerate.addEventListener("click", async () => {
       }
     }
 
-    playSfx("chime");
   } catch (err) {
     statusLight.className = "status-light red";
     statusText.textContent = "LM Studio ✗";
@@ -733,7 +616,6 @@ btnGrow.addEventListener("click", async () => {
     return;
   }
 
-  playSfx("click");
   btnGrow.disabled = true;
   btnGrow.innerHTML = '<span class="btn-icon">⏳</span> Growing…';
   vizHint.classList.remove("hidden");
@@ -765,7 +647,6 @@ btnGrow.addEventListener("click", async () => {
     controls.update();
 
     vizHint.classList.add("hidden");
-    playSfx("grow");
 
   } catch (err) {
     vizHint.innerHTML = `<span style="color:#f85149">⚠ ${err.message}</span>`;

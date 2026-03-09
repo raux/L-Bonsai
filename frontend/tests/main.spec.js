@@ -55,58 +55,6 @@ class Vector3Mock {
   }
 }
 
-class FakeOscillator {
-  constructor() {
-    this.type = "sine";
-    this.frequency = {
-      value: 0,
-      setValueAtTime: vi.fn(),
-      exponentialRampToValueAtTime: vi.fn(),
-    };
-    this.detune = { value: 0 };
-  }
-
-  connect = vi.fn();
-  start = vi.fn();
-  stop = vi.fn();
-}
-
-class FakeGain {
-  constructor() {
-    this.gain = {
-      value: 0,
-      setValueAtTime: vi.fn(),
-      exponentialRampToValueAtTime: vi.fn(),
-      linearRampToValueAtTime: vi.fn(),
-    };
-  }
-
-  connect = vi.fn();
-}
-
-class FakeAudioContext {
-  constructor() {
-    this.currentTime = 0;
-    this.destination = {};
-  }
-
-  createOscillator() {
-    return new FakeOscillator();
-  }
-
-  createGain() {
-    return new FakeGain();
-  }
-
-  createBiquadFilter() {
-    return {
-      type: "lowpass",
-      frequency: { value: 0 },
-      connect: vi.fn(),
-    };
-  }
-}
-
 const threeMock = {
   MathUtils: { degToRad: (deg) => (deg * Math.PI) / 180 },
   PCFSoftShadowMap: "pcf-soft-shadow",
@@ -219,7 +167,6 @@ function setupDom() {
     <button id="btn-grow"></button>
     <div id="status-light"></div>
     <div id="status-text"></div>
-    <button id="audio-toggle"><span id="audio-icon"></span></button>
     <div id="viz-hint"></div>
     <canvas id="bonsai-canvas"></canvas>
     <div id="pane-execution"></div>
@@ -235,8 +182,6 @@ beforeEach(() => {
   global.requestAnimationFrame = vi.fn();
   global.setInterval = vi.fn();
   global.devicePixelRatio = 1;
-  global.AudioContext = FakeAudioContext;
-  global.webkitAudioContext = FakeAudioContext;
 });
 
 afterEach(() => {
@@ -245,8 +190,6 @@ afterEach(() => {
   global.requestAnimationFrame = originalRAF;
   global.setInterval = originalSetInterval;
   global.devicePixelRatio = originalDevicePixelRatio;
-  delete global.AudioContext;
-  delete global.webkitAudioContext;
 });
 
 describe("LM Studio health indicator", () => {
