@@ -15,7 +15,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const LM_STUDIO_URL = "http://localhost:1234/v1";
+let LM_STUDIO_URL = "http://localhost:1234/v1";
 const BACKEND_URL = "/api"; // proxied by Vite dev server to localhost:8000
 
 // ---------------------------------------------------------------------------
@@ -32,6 +32,9 @@ const audioIcon    = document.getElementById("audio-icon");
 const vizHint      = document.getElementById("viz-hint");
 const bonsaiCanvas = document.getElementById("bonsai-canvas");
 const paneExecution= document.getElementById("pane-execution");
+const lmStudioUrlInput = document.getElementById("lm-studio-url");
+const modelSelector = document.getElementById("model-selector");
+const connectBtn = document.getElementById("connect-btn");
 
 // ---------------------------------------------------------------------------
 // Audio System
@@ -144,17 +147,80 @@ audioToggle.addEventListener("click", () => {
 });
 
 // ---------------------------------------------------------------------------
-// LM Studio Health Check
+// LM Studio Health Check and Model Management
 // ---------------------------------------------------------------------------
+let availableModels = [];
+let selectedModel = "local-model";
+let healthCheckInterval = null;
+
+// Initialize URL input with saved value or default
+lmStudioUrlInput.value = localStorage.getItem("lmStudioUrl") || "http://localhost:1234";
+
+// Update LM_STUDIO_URL when input changes
+lmStudioUrlInput.addEventListener("input", () => {
+  const baseUrl = lmStudioUrlInput.value.trim();
+  localStorage.setItem("lmStudioUrl", baseUrl);
+});
+
+async function fetchAvailableModels() {
+  try {
+    const baseUrl = lmStudioUrlInput.value.trim() || "http://localhost:1234";
+    const resp = await fetch(`${baseUrl}/v1/models`, { signal: AbortSignal.timeout(2500) });
+    if (!resp.ok) return [];
+
+    const data = await resp.json();
+    return data.data || [];
+  } catch {
+    return [];
+  }
+}
+
+async function updateModelSelector() {
+  const models = await fetchAvailableModels();
+  availableModels = models;
+
+  modelSelector.innerHTML = '<option value="">Select model...</option>';
+
+  if (models.length === 0) {
+    modelSelector.disabled = true;
+    return;
+  }
+
+  modelSelector.disabled = false;
+  models.forEach(model => {
+    const option = document.createElement("option");
+    option.value = model.id;
+    option.textContent = model.id;
+    modelSelector.appendChild(option);
+  });
+
+  // Restore previously selected model if available
+  const savedModel = localStorage.getItem("selectedModel");
+  if (savedModel && models.some(m => m.id === savedModel)) {
+    modelSelector.value = savedModel;
+    selectedModel = savedModel;
+  } else if (models.length > 0) {
+    modelSelector.value = models[0].id;
+    selectedModel = models[0].id;
+  }
+}
+
+modelSelector.addEventListener("change", () => {
+  selectedModel = modelSelector.value || "local-model";
+  localStorage.setItem("selectedModel", selectedModel);
+});
+
 async function checkLmStudioHealth() {
   try {
-    const abortCtrl = new AbortController();
-    const healthTimer = setTimeout(() => abortCtrl.abort(), 2500);
-    const resp = await fetch(`${LM_STUDIO_URL}/models`, { signal: abortCtrl.signal });
-    clearTimeout(healthTimer);
+    const baseUrl = lmStudioUrlInput.value.trim() || "http://localhost:1234";
+    LM_STUDIO_URL = `${baseUrl}/v1`;
+
+    const resp = await fetch(`${LM_STUDIO_URL}/models`, { signal: AbortSignal.timeout(2500) });
     if (resp.ok) {
       statusLight.className = "status-light green";
       statusText.textContent = "LM Studio ✓";
+      connectBtn.className = "header-btn connected";
+      connectBtn.innerHTML = '<span class="btn-icon">✓</span><span class="btn-label">Connected</span>';
       return true;
     }
   } catch {
@@ -162,12 +228,45 @@ async function checkLmStudioHealth() {
   }
   statusLight.className = "status-light red";
   statusText.textContent = "LM Studio ✗";
+  connectBtn.className = "header-btn";
+  connectBtn.innerHTML = '<span class="btn-icon">🔌</span><span class="btn-label">Connect</span>';
+  modelSelector.disabled = true;
   return false;
 }
 
-// Poll every 5 seconds
-checkLmStudioHealth();
-setInterval(checkLmStudioHealth, 5000);
+// Connect button handler
+connectBtn.addEventListener("click", async () => {
+  playSfx("click");
+  connectBtn.className = "header-btn connecting";
+  connectBtn.innerHTML = '<span class="btn-icon">⏳</span><span class="btn-label">Connecting...</span>';
+  statusLight.className = "status-light amber";
+  statusText.textContent = "Connecting…";
+
+  const connected = await checkLmStudioHealth();
+  if (connected) {
+    await updateModelSelector();
+    playSfx("chime");
+  }
+});
+
+// Initial connection attempt and start polling
+(async () => {
+  const connected = await checkLmStudioHealth();
+  if (connected) {
+    await updateModelSelector();
+  }
+
+  // Poll every 5 seconds
+  healthCheckInterval = setInterval(async () => {
+    const wasConnected = connectBtn.classList.contains("connected");
+    const isConnected = await checkLmStudioHealth();
+
+    // If we just connected, refresh models
+    if (isConnected && !wasConnected) {
+      await updateModelSelector();
+    }
+  }, 5000);
+})();
 
 // ---------------------------------------------------------------------------
 // LM Studio Streaming (Pane 1 → Pane 2)
@@ -190,7 +289,7 @@ btnGenerate.addEventListener("click", async () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "local-model", // LM Studio uses the loaded model regardless of name
+        model: selectedModel || "local-model",
         messages: [
           {
             role: "system",

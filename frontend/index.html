@@ -14,6 +14,22 @@
         <span class="tagline">Code → Bonsai Visualizer</span>
       </div>
       <div class="header-right">
+        <div class="model-controls">
+          <input
+            id="lm-studio-url"
+            type="text"
+            class="url-input"
+            placeholder="http://localhost:1234"
+            title="LM Studio base URL"
+          />
+          <select id="model-selector" class="model-dropdown" title="Select a model">
+            <option value="">Select model...</option>
+          </select>
+          <button id="connect-btn" class="header-btn" title="Connect to LM Studio">
+            <span class="btn-icon">🔌</span>
+            <span class="btn-label">Connect</span>
+          </button>
+        </div>
         <button id="audio-toggle" class="header-btn" title="Toggle ambient audio">
           <span id="audio-icon">🔇</span>
           <span class="btn-label">Lofi Focus</span>

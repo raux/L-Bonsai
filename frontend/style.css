@@ -88,6 +88,73 @@ html, body {
   color: var(--accent-green);
 }
 
+/* ---- Model controls ---- */
+.model-controls {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin-right: .8rem;
+}
+
+.url-input {
+  width: 200px;
+  padding: .3rem .6rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: .75rem;
+  font-family: var(--font-mono);
+  transition: border-color .15s;
+}
+
+.url-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.url-input::placeholder {
+  color: var(--text-hint);
+}
+
+.model-dropdown {
+  min-width: 150px;
+  max-width: 250px;
+  padding: .3rem .6rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: .75rem;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+
+.model-dropdown:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.model-dropdown:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.model-dropdown option {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+}
+
+#connect-btn.connected {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+#connect-btn.connecting {
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+}
+
 /* ---- Pane labels bar ---- */
 #pane-labels {
   display: grid;
