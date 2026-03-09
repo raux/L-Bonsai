@@ -227,6 +227,16 @@ async function checkLmStudioHealth() {
     const baseUrl = lmStudioUrlInput ? lmStudioUrlInput.value.trim() : "http://localhost:1234";
     if (!baseUrl) return false;
 
+    // Validate URL format (basic check)
+    try {
+      new URL(baseUrl.startsWith('http') ? baseUrl : `http://${baseUrl}`);
+    } catch {
+      console.warn('Invalid URL format:', baseUrl);
+      if (statusLight) statusLight.className = "status-light red";
+      if (statusText) statusText.textContent = "Invalid URL";
+      return false;
+    }
+
     LM_STUDIO_URL = `${baseUrl}/v1`;
 
     const resp = await fetch(`${LM_STUDIO_URL}/models`, { signal: AbortSignal.timeout(2500) });
@@ -238,9 +248,11 @@ async function checkLmStudioHealth() {
         connectBtn.innerHTML = '<span class="btn-icon">✓</span><span class="btn-label">Connected</span>';
       }
       return true;
+    } else {
+      console.warn(`Server returned HTTP ${resp.status}`);
     }
-  } catch {
-    /* fall through */
+  } catch (err) {
+    console.warn('Connection error:', err.message || err);
   }
   if (statusLight) statusLight.className = "status-light red";
   if (statusText) statusText.textContent = "LM Studio ✗";
@@ -264,6 +276,19 @@ if (connectBtn) {
     const connected = await checkLmStudioHealth();
     if (connected) {
       await updateModelSelector();
+
+      // Verify selected model is available
+      if (selectedModel && modelSelector) {
+        const models = await fetchAvailableModels();
+        const modelAvailable = models.some(m => m.id === selectedModel);
+        if (!modelAvailable && models.length > 0) {
+          console.warn(`Previously selected model "${selectedModel}" not found. Using ${models[0].id}`);
+          modelSelector.value = models[0].id;
+          selectedModel = models[0].id;
+          localStorage.setItem("selectedModel", selectedModel);
+        }
+      }
+
       playSfx("chime");
     }
   });
@@ -282,9 +307,21 @@ if (connectBtn) {
       const wasConnected = connectBtn.classList.contains("connected");
       const isConnected = await checkLmStudioHealth();
 
-      // If we just connected, refresh models
+      // If we just connected, refresh models and validate selection
       if (isConnected && !wasConnected) {
         await updateModelSelector();
+
+        // Verify selected model is still available
+        if (selectedModel && modelSelector) {
+          const models = await fetchAvailableModels();
+          const modelAvailable = models.some(m => m.id === selectedModel);
+          if (!modelAvailable && models.length > 0) {
+            console.warn(`Previously selected model "${selectedModel}" not found. Switching to ${models[0].id}`);
+            modelSelector.value = models[0].id;
+            selectedModel = models[0].id;
+            localStorage.setItem("selectedModel", selectedModel);
+          }
+        }
       }
     }, 5000);
   }
@@ -327,7 +364,10 @@ btnGenerate.addEventListener("click", async () => {
       }),
     });
 
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    if (!resp.ok) {
+      const errorText = await resp.text().catch(() => '');
+      throw new Error(`HTTP ${resp.status} ${resp.statusText}${errorText ? ` - ${errorText}` : ''}`);
+    }
 
     statusLight.className = "status-light green";
     statusText.textContent = "LM Studio ✓";
